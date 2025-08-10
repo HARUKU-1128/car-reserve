@@ -224,12 +224,22 @@ function renderCalendar(){
   const y=currentState.ym.getFullYear(), m=currentState.ym.getMonth();
   const first=new Date(y,m,1); const startDay=first.getDay(); const lastDate=new Date(y,m+1,0).getDate();
 
-  for(let i=0;i<startDay;i++){ const cell=document.createElement('div'); cell.className='day is-empty'; grid.appendChild(cell); }
+  // 今月1日の前の空白
+  for(let i=0;i<startDay;i++){
+    const cell=document.createElement('div'); cell.className='day is-empty';
+    const num=document.createElement('div'); num.className='num'; cell.appendChild(num);
+    cell.appendChild(document.createElement('div')).className='events';
+    const btn=document.createElement('button'); btn.className='new'; btn.textContent='予約';
+    btn.disabled = true; // 空セルは無効
+    cell.appendChild(btn);
+    grid.appendChild(cell);
+  }
 
   const today=new Date();
   const isSame=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
   const monthStart=new Date(y,m,1,0,0,0,0); const monthEnd=new Date(y,m+1,0,23,59,59,999);
 
+  // 日別に予定を割り当て
   const byDate=new Map();
   for(const r of currentState.reservations){
     const rs=toDate(r.startISO), re=toDate(r.endISO);
@@ -249,24 +259,44 @@ function renderCalendar(){
   for(let d=1; d<=lastDate; d++){
     const cell=document.createElement('div'); cell.className='day';
     const thisDate=new Date(y,m,d); if(isSame(thisDate, today)) cell.classList.add('is-today');
+
     const num=document.createElement('div'); num.className='num'; num.textContent=d; cell.appendChild(num);
 
-    const key=`${y}-${pad(m+1)}-${pad(d)}`; const items=byDate.get(key)||[];
-    const maxBars=2;
-    for(let i=0;i<Math.min(maxBars, items.length); i++){
-      const it=items[i]; const bar=document.createElement('div'); bar.className='event-bar';
-      if(it.isStart) bar.classList.add('event-left'); if(it.isEnd) bar.classList.add('event-right');
-      bar.style.background=colorForOwner(it.r.owner); bar.title=`${it.r.owner||''} ${it.r.note||''}`;
-      const span=document.createElement('span'); span.className='event-label'; span.textContent=(it.r.note||it.r.owner||'').slice(0,12);
-      bar.appendChild(span); bar.addEventListener('click',(e)=>{ e.stopPropagation(); openDialogForEdit(it.r.id); }); cell.appendChild(bar);
-    }
-    if(items.length>maxBars){ const more=document.createElement('div'); more.className='more-indicator'; more.textContent=`+${items.length-maxBars} 件`; cell.appendChild(more); }
+    // 予定置き場
+    const events=document.createElement('div'); events.className='events'; cell.appendChild(events);
 
+    const key=`${y}-${pad(m+1)}-${pad(d)}`;
+    const items=byDate.get(key)||[];
+    const maxBars=2;
+
+    for(let i=0;i<Math.min(maxBars, items.length); i++){
+      const it=items[i];
+      const bar=document.createElement('div'); bar.className='event-bar';
+      if(it.isStart) bar.classList.add('event-left');
+      if(it.isEnd)   bar.classList.add('event-right');
+      bar.style.background=colorForOwner(it.r.owner);
+      bar.title=`${it.r.owner||''} ${it.r.note||''}`.trim();
+      const span=document.createElement('span'); span.className='event-label';
+      span.textContent=(it.r.note || it.r.owner || '予約');
+      bar.appendChild(span);
+      bar.addEventListener('click',(e)=>{ e.stopPropagation(); openDialogForEdit(it.r.id); });
+      events.appendChild(bar);
+    }
+    if(items.length>maxBars){
+      const more=document.createElement('div'); more.className='more-indicator';
+      more.textContent=`+${items.length-maxBars} 件`;
+      events.appendChild(more);
+    }
+
+    // 最後に予約ボタン（常に下）
     const btn=document.createElement('button'); btn.className='new'; btn.textContent='予約';
     btn.addEventListener('click', ()=> openDialogForCreate(`${y}-${pad(m+1)}-${pad(d)}`));
-    cell.appendChild(btn); grid.appendChild(cell);
+    cell.appendChild(btn);
+
+    grid.appendChild(cell);
   }
 }
+
 
 // ---- dialog / actions ----
 const dlg = $('#dlg');
@@ -416,11 +446,16 @@ $('#fileInput').addEventListener('change', e=>{
   if(store.mode==='local'){
     banner.classList.remove('hidden');
     banner.innerHTML = `<span class="tag">ローカル保存</span> Firebase未設定またはhttp環境のため、端末内のみで保存・表示します。設定後は自動で共有モードに切替されます。`;
+    $('#btnExport').style.display = '';
+    $('#btnImport').style.display = '';
     store.subscribe(list => { currentState.reservations = list; render(); });
   }else{
     banner.classList.remove('hidden');
     banner.innerHTML = `<span class="tag">共有モード</span> Firestoreにリアルタイム保存・共有しています。`;
+    $('#btnExport').style.display = 'none';
+    $('#btnImport').style.display = 'none';
     await store.subscribe(list => { currentState.reservations = list; render(); });
   }
   render();
 })();
+
