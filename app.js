@@ -92,21 +92,45 @@ function firebaseStore(){
   let api = {
     mode: 'firebase',
     async subscribe(cb){
-      const [appMod, fsMod] = await Promise.all([
+      // ここで必要モジュールをまとめて読み込み（app / firestore / auth）
+      const [appMod, fsMod, authMod] = await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js"),
-        import("https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js")
+        import("https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js"),
+        import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js"),
       ]);
+
       const { initializeApp } = appMod;
-      const { getFirestore, enableIndexedDbPersistence, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy } = fsMod;
+      const {
+        getFirestore, enableIndexedDbPersistence,
+        collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy
+      } = fsMod;
+      const { getAuth, signInAnonymously } = authMod;
+
+      // Firebase初期化
       const app = initializeApp(firebaseConfig);
       const db = getFirestore(app);
-      try{ await enableIndexedDbPersistence(db); }catch(e){}
+
+      // 匿名ログイン（ルールで request.auth != null を満たすため）
+      try {
+        const auth = getAuth(app);
+        await signInAnonymously(auth);
+      } catch (e) {
+        console.warn('Anonymous sign-in failed:', e);
+      }
+
+      // オフライン時も読み取りをキャッシュ
+      try { await enableIndexedDbPersistence(db); } catch(e) {}
+
+      // households/{HOUSEHOLD_ID}/reservations をリアルタイム購読
       const col = collection(db, 'households', HOUSEHOLD_ID, 'reservations');
       unsub = onSnapshot(query(col, orderBy('startISO')), (snap)=>{
-        const arr = []; snap.forEach(docSnap => arr.push(docSnap.data())); cb(arr);
+        const arr = [];
+        snap.forEach(docSnap => arr.push(docSnap.data()));
+        cb(arr);
       });
+
       api._fs = { db, collection, doc, setDoc, deleteDoc, col };
-      return()=>{ unsub && unsub(); };
+      return () => { unsub && unsub(); };
     },
     async upsert(data){
       const { db, doc, setDoc } = api._fs;
@@ -121,11 +145,14 @@ function firebaseStore(){
     async export(){ return currentState.reservations.slice(); },
     async import(list){
       const { db, doc, setDoc } = api._fs;
-      for(const r of list){ await setDoc(doc(db,'households',HOUSEHOLD_ID,'reservations', r.id), r, {merge:true}); }
+      for (const r of list) {
+        await setDoc(doc(db,'households',HOUSEHOLD_ID,'reservations', r.id), r, {merge:true});
+      }
     }
   };
   return api;
 }
+
 
 let currentState = {
   ym: (()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })(),
