@@ -1,4 +1,7 @@
-// v3.2 Firebase-ready with graceful fallback
+// v3.2 Firebase-ready with graceful fallback (final)
+
+// ---- Firebase config ----
+// ※この値はあなたのプロジェクトのものに置き換え済み
 const firebaseConfig = {
   apiKey: "AIzaSyDT9q9PRQMeE-wwezchzgr6G0rbigpD2pc",
   authDomain: "car-reserve-c4baf.firebaseapp.com",
@@ -9,8 +12,10 @@ const firebaseConfig = {
   measurementId: "G-YTPXXHNLRV"
 };
 
-export const HOUSEHOLD_ID = "4eviti4w5xna4iir";
+// 家族の合言葉（Firestore ルールの householdId と一致させる）
+const HOUSEHOLD_ID = "4eviti4w5xna4iir";
 
+// ---- DOM helpers / utils ----
 const $ = (s)=>document.querySelector(s);
 const pad = (n)=>n.toString().padStart(2,'0');
 const banner = $("#banner");
@@ -49,6 +54,7 @@ function colorForOwner(owner){
   return `hsl(${h} 65% 45%)`;
 }
 
+// ---- localStorage fallback ----
 const LS_KEY = 'car-reservations-v3';
 function lsLoad(){ try{ const raw = localStorage.getItem(LS_KEY); return raw ? JSON.parse(raw) : []; } catch(e){ console.error(e); return []; } }
 function lsSave(list){ localStorage.setItem(LS_KEY, JSON.stringify(list)); }
@@ -61,6 +67,7 @@ function canUseFirebase(){
   return httpsOk && isConfigFilled(firebaseConfig);
 }
 
+// ---- datastore abstraction (firebase / local) ----
 const store = (function(){
   if(canUseFirebase()){
     return firebaseStore();
@@ -89,91 +96,104 @@ function localStore(){
 
 function firebaseStore(){
   let unsub = null;
-  let api = {
+  let fs = null; // Firestore helpersを保持
+
+  const api = {
     mode: 'firebase',
     async subscribe(cb){
-      // ここで必要モジュールをまとめて読み込み（app / firestore / auth）
-      // 3つ目に auth を読み込み
-      const [appMod, fsMod, authMod] = await Promise.all([
+      // Firebase v10 modular SDK を動的ロード
+      const [{ initializeApp }, firestore, authMod] = await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js"),
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js"),
       ]);
-      const { initializeApp } = appMod;
-      const { getFirestore, enableIndexedDbPersistence, ... } = fsMod;
+
+      const {
+        getFirestore, enableIndexedDbPersistence,
+        collection, doc, setDoc, deleteDoc,
+        onSnapshot, query, orderBy
+      } = firestore;
       const { getAuth, signInAnonymously } = authMod;
-      
+
       const app = initializeApp(firebaseConfig);
       const db  = getFirestore(app);
-      
-      // ★これが必須
-      
-
 
       // 匿名ログイン（ルールで request.auth != null を満たすため）
       try {
         const auth = getAuth(app);
-        await signInAnonymously(auth);
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
       } catch (e) {
         console.warn('Anonymous sign-in failed:', e);
+        // 認証できないとルールで弾かれるので、UIに警告だけ表示（フォールバックはしない）
       }
 
-      // オフライン時も読み取りをキャッシュ
+      // オフライン読み取りキャッシュ
       try { await enableIndexedDbPersistence(db); } catch(e) {}
 
       // households/{HOUSEHOLD_ID}/reservations をリアルタイム購読
-      const col = collection(db, 'households', HOUSEHOLD_ID, 'reservations');
-      unsub = onSnapshot(query(col, orderBy('startISO')), (snap)=>{
+      const colRef = collection(db, 'households', HOUSEHOLD_ID, 'reservations');
+      unsub = onSnapshot(query(colRef, orderBy('startISO')), (snap)=>{
         const arr = [];
         snap.forEach(docSnap => arr.push(docSnap.data()));
         cb(arr);
+      }, (err)=>{
+        console.error('onSnapshot error:', err);
       });
 
-      api._fs = { db, collection, doc, setDoc, deleteDoc, col };
-      return () => { unsub && unsub(); };
+      // 後続API呼び出し用に保存
+      fs = { db, collection, doc, setDoc, deleteDoc, colRef };
+      return () => { if (unsub) unsub(); };
     },
+
     async upsert(data){
-      const { db, doc, setDoc } = api._fs;
-      const ref = doc(db, 'households', HOUSEHOLD_ID, 'reservations', data.id);
-      await setDoc(ref, data, { merge:true });
+      const ref = fs.doc(fs.db, 'households', HOUSEHOLD_ID, 'reservations', data.id);
+      await fs.setDoc(ref, data, { merge:true });
     },
+
     async remove(id){
-      const { db, doc, deleteDoc } = api._fs;
-      const ref = doc(db, 'households', HOUSEHOLD_ID, 'reservations', id);
-      await deleteDoc(ref);
+      const ref = fs.doc(fs.db, 'households', HOUSEHOLD_ID, 'reservations', id);
+      await fs.deleteDoc(ref);
     },
+
     async export(){ return currentState.reservations.slice(); },
+
     async import(list){
-      const { db, doc, setDoc } = api._fs;
       for (const r of list) {
-        await setDoc(doc(db,'households',HOUSEHOLD_ID,'reservations', r.id), r, {merge:true});
+        const ref = fs.doc(fs.db, 'households', HOUSEHOLD_ID, 'reservations', r.id);
+        await fs.setDoc(ref, r, { merge:true });
       }
     }
   };
   return api;
 }
 
-
+// ---- UI state & rendering ----
 let currentState = {
   ym: (()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })(),
   reservations: [],
   listMode: 'today',
 };
+
 function render(){
   $('#monthTitle').textContent = monthTitle(currentState.ym);
   renderList();
   renderCalendar();
 }
+
 function renderList(){
   const body = $('#listBody'); body.innerHTML = '';
   let range;
   if(currentState.listMode==='today') range = dayRange(new Date());
   else if(currentState.listMode==='week') range = weekRange(new Date());
   else range = monthRange(new Date());
+
   const [rs,re] = range;
   const items = currentState.reservations
     .filter(r => (toDate(r.startISO) < re) && (rs < toDate(r.endISO)))
     .sort((a,b)=> toDate(a.startISO) - toDate(b.startISO));
+
   if(items.length===0){
     const div = document.createElement('div'); div.className='list-empty';
     div.textContent = (currentState.listMode==='today') ? '本日の予約はありません。' :
@@ -196,14 +216,18 @@ function renderList(){
   }
   section.appendChild(ul); body.appendChild(section);
 }
+
 function renderCalendar(){
   const grid = $('#calendarGrid'); grid.innerHTML='';
   const y=currentState.ym.getFullYear(), m=currentState.ym.getMonth();
   const first=new Date(y,m,1); const startDay=first.getDay(); const lastDate=new Date(y,m+1,0).getDate();
+
   for(let i=0;i<startDay;i++){ const cell=document.createElement('div'); cell.className='day is-empty'; grid.appendChild(cell); }
+
   const today=new Date();
   const isSame=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
   const monthStart=new Date(y,m,1,0,0,0,0); const monthEnd=new Date(y,m+1,0,23,59,59,999);
+
   const byDate=new Map();
   for(const r of currentState.reservations){
     const rs=toDate(r.startISO), re=toDate(r.endISO);
@@ -219,10 +243,12 @@ function renderCalendar(){
       cur.setDate(cur.getDate()+1);
     }
   }
+
   for(let d=1; d<=lastDate; d++){
     const cell=document.createElement('div'); cell.className='day';
     const thisDate=new Date(y,m,d); if(isSame(thisDate, today)) cell.classList.add('is-today');
     const num=document.createElement('div'); num.className='num'; num.textContent=d; cell.appendChild(num);
+
     const key=`${y}-${pad(m+1)}-${pad(d)}`; const items=byDate.get(key)||[];
     const maxBars=2;
     for(let i=0;i<Math.min(maxBars, items.length); i++){
@@ -233,12 +259,14 @@ function renderCalendar(){
       bar.appendChild(span); bar.addEventListener('click',(e)=>{ e.stopPropagation(); openDialogForEdit(it.r.id); }); cell.appendChild(bar);
     }
     if(items.length>maxBars){ const more=document.createElement('div'); more.className='more-indicator'; more.textContent=`+${items.length-maxBars} 件`; cell.appendChild(more); }
+
     const btn=document.createElement('button'); btn.className='new'; btn.textContent='予約';
     btn.addEventListener('click', ()=> openDialogForCreate(`${y}-${pad(m+1)}-${pad(d)}`));
     cell.appendChild(btn); grid.appendChild(cell);
   }
 }
 
+// ---- dialog / actions ----
 const dlg = $('#dlg');
 const inAllDay = $('#inAllDay');
 const inStartDate = $('#inStartDate');
@@ -264,6 +292,7 @@ function openDialogForCreate(ymd){
   inStartDT.value = `${base}T09:00`; inEndDT.value = `${base}T12:00`;
   dlg.style.display='flex';
 }
+
 function openDialogForEdit(id){
   const r = currentState.reservations.find(x=>x.id===id); if(!r) return;
   editId = id;
@@ -287,12 +316,15 @@ function openDialogForEdit(id){
   }
   dlg.style.display='flex';
 }
+
 inAllDay.addEventListener('change', ()=>{
   if(inAllDay.checked){ $('#rowDates').classList.remove('hidden'); $('#rowDateTimes').classList.add('hidden'); }
   else{ $('#rowDates').classList.add('hidden'); $('#rowDateTimes').classList.remove('hidden'); }
 });
+
 function closeDialog(){ dlg.style.display='none'; }
 function showError(msg){ errBox.textContent=msg; errBox.classList.remove('hidden'); }
+
 $('#btnCancel').addEventListener('click', closeDialog);
 $('#btnNew').addEventListener('click', ()=> openDialogForCreate());
 
@@ -303,6 +335,7 @@ $('#btnSave').addEventListener('click', async ()=>{
   const owner = inOwner.value.trim();
   const note = inNote.value.trim();
   const allDay = inAllDay.checked;
+
   let startISO, endISO;
   if(allDay){
     if(!inStartDate.value || !inEndDate.value) return showError('開始日／終了日を入力してください。');
@@ -316,18 +349,30 @@ $('#btnSave').addEventListener('click', async ()=>{
   if(!owner) return showError('「名前」を入力してください。');
   const s = toDate(startISO), e = toDate(endISO);
   if(!(s<e)) return showError('終了は開始より後にしてください。');
+
   const candidate = { id: editId || newId(), owner, startISO, endISO, note, allDay };
   const conflict = currentState.reservations.some(r=> r.id!==candidate.id && overlap(toDate(candidate.startISO), toDate(candidate.endISO), toDate(r.startISO), toDate(r.endISO)));
   if(conflict) return showError('この時間帯は既に予約があります。別の時間を選んでください。');
-  await store.upsert(candidate);
-  closeDialog();
+
+  try{
+    await store.upsert(candidate);
+    closeDialog();
+  }catch(e){
+    console.error('save failed:', e);
+    showError('保存に失敗しました。しばらく待って再試行してください。');
+  }
 });
 
 $('#btnDelete').addEventListener('click', async ()=>{
   if(!editId) return;
   if(!confirm('この予約を削除しますか？（元に戻せません）')) return;
-  await store.remove(editId);
-  closeDialog();
+  try{
+    await store.remove(editId);
+    closeDialog();
+  }catch(e){
+    console.error('delete failed:', e);
+    showError('削除に失敗しました。');
+  }
 });
 
 $('#tabToday').addEventListener('click', ()=>{ currentState.listMode='today'; setTabActive('today'); renderList(); });
@@ -364,6 +409,7 @@ $('#fileInput').addEventListener('change', e=>{
   reader.readAsText(file,'utf-8');
 });
 
+// ---- bootstrap ----
 (async function init(){
   if(store.mode==='local'){
     banner.classList.remove('hidden');
