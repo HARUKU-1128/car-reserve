@@ -2,15 +2,17 @@
 
 // ---- Firebase config ----
 // ※この値はあなたのプロジェクトのものに置き換え済み
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyDT9q9PRQMeE-wwezchzgr6G0rbigpD2pc",
+  apiKey: "AIzaSyDT9q9PRQMeE-wwcezhzgr6G0rbigpD2pc",
   authDomain: "car-reserve-c4baf.firebaseapp.com",
   projectId: "car-reserve-c4baf",
-  storageBucket: "car-reserve-c4baf.appspot.com",
+  storageBucket: "car-reserve-c4baf.appspot.com", // ← 修正
   messagingSenderId: "585548778871",
   appId: "1:585548778871:web:bf2a260f6d654ae9772572",
   measurementId: "G-YTPXXHNLRV"
 };
+
 
 // 家族の合言葉（Firestore ルールの householdId と一致させる）
 const HOUSEHOLD_ID = "4eviti4w5xna4iir";
