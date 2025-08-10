@@ -107,7 +107,7 @@ function firebaseStore(){
       const db  = getFirestore(app);
       
       // ★これが必須
-      await signInAnonymously(getAuth(app));
+      
 
 
       // 匿名ログイン（ルールで request.auth != null を満たすため）
