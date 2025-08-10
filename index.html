@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>家庭内車予約アプリ</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="theme-color" content="#0f1115">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>家庭内車予約アプリ</h1>
+    <nav class="month-nav">
+      <button class="ghost" id="btnPrev">〈 前月</button>
+      <div class="month-title" id="monthTitle"></div>
+      <button class="ghost" id="btnNext">翌月 〉</button>
+      <button class="ghost today" id="btnToday">今日へ</button>
+    </nav>
+  </header>
+
+  <main class="container">
+    <section class="summary-card" id="sumCard">
+      <div class="tabs">
+        <button class="tab active" id="tabToday">今日</button>
+        <button class="tab" id="tabWeek">今週</button>
+        <button class="tab" id="tabMonth">今月</button>
+      </div>
+      <div class="list-body" id="listBody"></div>
+    </section>
+
+    <section class="calendar-card" id="calCard">
+      <div class="weekdays">
+        <div>日</div><div>月</div><div>火</div><div>水</div><div>木</div><div>金</div><div>土</div>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+    </section>
+
+    <div class="footer-actions">
+      <button class="secondary" id="btnExport">エクスポート</button>
+      <button class="secondary" id="btnImport">インポート</button>
+      <input type="file" id="fileInput" accept="application/json" style="display:none" />
+    </div>
+
+    <button class="fab" id="btnNew" title="予約を作成">＋</button>
+  </main>
+
+  <div class="dialog-backdrop" id="dlg">
+    <div class="dialog">
+      <h2 id="dlgTitle">予約を作成</h2>
+
+      <label class="inline">
+        <input type="checkbox" id="inAllDay" checked />
+        <span>終日</span>
+      </label>
+
+      <div id="rowDates">
+        <label>開始日<input type="date" id="inStartDate" /></label>
+        <label>終了日<input type="date" id="inEndDate" /></label>
+      </div>
+
+      <div id="rowDateTimes" class="hidden">
+        <label>開始日時<input type="datetime-local" id="inStartDT" /></label>
+        <label>終了日時<input type="datetime-local" id="inEndDT" /></label>
+      </div>
+
+      <label>名前<input type="text" id="inOwner" placeholder="例：Haruku" /></label>
+      <label>メモ<input type="text" id="inNote" placeholder="任意" /></label>
+
+      <div class="error hidden" id="errBox"></div>
+      <div class="dialog-actions">
+        <button class="danger" id="btnDelete">削除</button>
+        <span class="spacer"></span>
+        <button class="ghost" id="btnCancel">キャンセル</button>
+        <button class="primary" id="btnSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="banner" class="banner hidden"></div>
+
+  <footer class="app-footer">
+    <small>v3.2：Firebase同期／オフライン対応。未設定やhttp環境では自動でローカル保存モードに切替。</small>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(console.error);
+      });
+    }
+  </script>
+</body>
+</html>
