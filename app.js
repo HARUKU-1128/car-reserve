@@ -1,12 +1,14 @@
 // v3.2 Firebase-ready with graceful fallback
-export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_AUTH_DOMAIN",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_STORAGE_BUCKET",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID"
+const firebaseConfig = {
+  apiKey: "AIzaSyDT9q9PRQMeE-wwezchzgr6G0rbigpD2pc",
+  authDomain: "car-reserve-c4baf.firebaseapp.com",
+  projectId: "car-reserve-c4baf",
+  storageBucket: "car-reserve-c4baf.appspot.com",
+  messagingSenderId: "585548778871",
+  appId: "1:585548778871:web:bf2a260f6d654ae9772572",
+  measurementId: "G-YTPXXHNLRV"
 };
+
 export const HOUSEHOLD_ID = "4eviti4w5xna4iir";
 
 const $ = (s)=>document.querySelector(s);
