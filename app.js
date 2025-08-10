@@ -93,22 +93,22 @@ function firebaseStore(){
     mode: 'firebase',
     async subscribe(cb){
       // ここで必要モジュールをまとめて読み込み（app / firestore / auth）
+      // 3つ目に auth を読み込み
       const [appMod, fsMod, authMod] = await Promise.all([
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-app.js"),
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-firestore.js"),
         import("https://www.gstatic.com/firebasejs/10.12.3/firebase-auth.js"),
       ]);
-
       const { initializeApp } = appMod;
-      const {
-        getFirestore, enableIndexedDbPersistence,
-        collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy
-      } = fsMod;
+      const { getFirestore, enableIndexedDbPersistence, ... } = fsMod;
       const { getAuth, signInAnonymously } = authMod;
-
-      // Firebase初期化
+      
       const app = initializeApp(firebaseConfig);
-      const db = getFirestore(app);
+      const db  = getFirestore(app);
+      
+      // ★これが必須
+      await signInAnonymously(getAuth(app));
+
 
       // 匿名ログイン（ルールで request.auth != null を満たすため）
       try {
